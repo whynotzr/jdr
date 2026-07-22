@@ -5759,6 +5759,75 @@ body {
   outline-offset: 2px;
 }
 
+/* Larger drawing surface after removing map zoom controls */
+.draw-toolbar {
+  grid-template-columns:
+    auto
+    minmax(360px, 0.92fr)
+    minmax(280px, 1fr)
+    auto
+    minmax(180px, 0.64fr)
+    minmax(230px, 0.78fr);
+  gap: 6px;
+  padding: 8px;
+}
+
+.tool-group {
+  grid-template-columns: repeat(5, minmax(68px, 1fr));
+}
+
+.draw-actions {
+  grid-template-columns: repeat(3, minmax(68px, 1fr));
+}
+
+.tool-button#bucketTool.active {
+  border-color: rgba(245, 205, 99, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 18px rgba(210, 125, 42, 0.28);
+}
+
+.tabletop-frame.is-bucket .draw-canvas {
+  cursor: cell;
+}
+
+.draw-canvas {
+  min-height: clamp(360px, 52vh, 760px);
+}
+
+@media (max-width: 1440px) {
+  .draw-toolbar {
+    grid-template-columns: minmax(320px, 1fr) minmax(260px, 1fr) auto;
+  }
+
+  .draw-toolbar .toolbar-label {
+    display: none;
+  }
+
+  .tool-group {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .palette-strip {
+    grid-column: span 2;
+  }
+
+  .draw-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 920px) {
+  .draw-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .palette-strip,
+  .draw-actions {
+    grid-column: auto;
+  }
+}
+
 .custom-die-form {
   grid-template-columns: minmax(0, 1fr) minmax(78px, 0.45fr);
 }
@@ -5879,4 +5948,96 @@ body {
 .detail-stat strong {
   font-size: 16px;
   line-height: 1;
+}
+
+/* Drawing layout: compact tools, no map controls, no canvas overlap */
+.table-main {
+  grid-template-rows: 128px minmax(0, 1fr) clamp(184px, 24vh, 210px);
+}
+
+.tabletop-frame {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.draw-toolbar {
+  grid-template-columns: minmax(254px, 1fr) minmax(158px, 0.74fr) 48px;
+  gap: 6px;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.draw-toolbar .toolbar-label {
+  display: none;
+}
+
+.tool-group {
+  grid-template-columns: repeat(5, minmax(48px, 1fr));
+  gap: 4px;
+}
+
+.tool-button,
+.draw-toolbar .ghost-button {
+  min-height: 29px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.palette-strip {
+  grid-column: auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.palette-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.swatch-row {
+  min-height: 30px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  border-width: 1px;
+  border-radius: 5px;
+}
+
+.color-control {
+  justify-self: end;
+}
+
+.range-label {
+  grid-column: 1;
+  min-height: 31px;
+  grid-template-columns: auto minmax(132px, 1fr);
+}
+
+.range-label input[type="range"] {
+  height: 18px;
+}
+
+.draw-actions {
+  grid-column: 2 / 4;
+  grid-template-columns: repeat(3, minmax(58px, 1fr));
+}
+
+.draw-canvas {
+  height: 100%;
+  min-height: 0 !important;
+  max-height: 100%;
+  transform: none;
+}
+
+@media (max-width: 920px) {
+  .draw-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .range-label,
+  .draw-actions,
+  .palette-strip {
+    grid-column: auto;
+  }
 }

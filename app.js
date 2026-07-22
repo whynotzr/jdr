@@ -10,6 +10,12 @@ const characterStatDefinitions = [
 const remoteApiOrigin = "https://jdr-kean-cheri.marckjean1310.chatgpt.site";
 const isGithubPages = window.location.hostname.endsWith(".github.io");
 const apiBase = isGithubPages ? remoteApiOrigin : "";
+const strokePointLimits = {
+  pen: 900,
+  marker: 900,
+  erase: 900,
+  fill: 8000
+};
 
 let session = readStoredJson("jdr-session");
 let mjAccount = readStoredJson("jdr-mj-account");
@@ -175,6 +181,7 @@ const elements = {
   markerTool: document.querySelector("#markerTool"),
   eraseTool: document.querySelector("#eraseTool"),
   eyedropperTool: document.querySelector("#eyedropperTool"),
+  bucketTool: document.querySelector("#bucketTool"),
   colorSwatches: document.querySelector("#colorSwatches"),
   currentColorPreview: document.querySelector("#currentColorPreview"),
   drawColor: document.querySelector("#drawColor"),
@@ -484,6 +491,7 @@ function bindEvents() {
   elements.markerTool.addEventListener("click", () => setDrawingMode("marker"));
   elements.eraseTool.addEventListener("click", () => setDrawingMode("erase"));
   elements.eyedropperTool.addEventListener("click", () => setDrawingMode("eyedropper"));
+  elements.bucketTool.addEventListener("click", () => setDrawingMode("bucket"));
 
   elements.colorSwatches.querySelectorAll("[data-color]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -513,11 +521,21 @@ function bindEvents() {
     action("redoDrawing", {});
   });
 
-  elements.zoomOutButton.addEventListener("click", () => setMapZoom(mapZoom - 0.15));
-  elements.zoomInButton.addEventListener("click", () => setMapZoom(mapZoom + 0.15));
-  elements.zoomResetButton.addEventListener("click", () => setMapZoom(1));
-  elements.centerMapButton.addEventListener("click", centerMap);
-  elements.fullscreenMapButton.addEventListener("click", toggleMapFullscreen);
+  if (elements.zoomOutButton) {
+    elements.zoomOutButton.addEventListener("click", () => setMapZoom(mapZoom - 0.15));
+  }
+  if (elements.zoomInButton) {
+    elements.zoomInButton.addEventListener("click", () => setMapZoom(mapZoom + 0.15));
+  }
+  if (elements.zoomResetButton) {
+    elements.zoomResetButton.addEventListener("click", () => setMapZoom(1));
+  }
+  if (elements.centerMapButton) {
+    elements.centerMapButton.addEventListener("click", centerMap);
+  }
+  if (elements.fullscreenMapButton) {
+    elements.fullscreenMapButton.addEventListener("click", toggleMapFullscreen);
+  }
   elements.toggleLeftColumnButton.addEventListener("click", () => elements.app.classList.toggle("hide-left"));
   elements.toggleRightColumnButton.addEventListener("click", () => elements.app.classList.toggle("hide-right"));
 
@@ -590,6 +608,7 @@ function bindEvents() {
   elements.drawCanvas.addEventListener("pointermove", continueDrawing);
   elements.drawCanvas.addEventListener("pointerup", finishDrawing);
   elements.drawCanvas.addEventListener("pointerleave", finishDrawing);
+  elements.drawCanvas.addEventListener("pointercancel", finishDrawing);
 
   elements.characterForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1039,6 +1058,7 @@ function setMjControlsReadonly(readonly) {
     elements.markerTool,
     elements.eraseTool,
     elements.eyedropperTool,
+    elements.bucketTool,
     elements.drawColor,
     elements.drawSize,
     elements.undoDrawingButton,
@@ -2299,7 +2319,9 @@ function setDrawingMode(mode) {
   elements.markerTool.classList.toggle("active", mode === "marker");
   elements.eraseTool.classList.toggle("active", mode === "erase");
   elements.eyedropperTool.classList.toggle("active", mode === "eyedropper");
+  elements.bucketTool.classList.toggle("active", mode === "bucket");
   elements.drawView.classList.toggle("is-eyedropper", mode === "eyedropper");
+  elements.drawView.classList.toggle("is-bucket", mode === "bucket");
 }
 
 function setCurrentColor(color) {
@@ -2322,6 +2344,11 @@ function startDrawing(event) {
 
   if (drawingMode === "eyedropper") {
     pickCanvasColor(event);
+    return;
+  }
+
+  if (drawingMode === "bucket") {
+    fillBucketAt(event);
     return;
   }
 
@@ -2348,6 +2375,134 @@ function pickCanvasColor(event) {
   setDrawingMode("pen");
 }
 
+function fillBucketAt(event) {
+  flushDrawingRender();
+
+  const canvas = elements.drawCanvas;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const rect = canvas.getBoundingClientRect();
+  const startX = Math.floor(clamp((event.clientX - rect.left) / rect.width, 0, 1) * (canvas.width - 1));
+  const startY = Math.floor(clamp((event.clientY - rect.top) / rect.height, 0, 1) * (canvas.height - 1));
+  const fillColor = hexToRgb(elements.drawColor.value);
+
+  if (!fillColor) {
+    return;
+  }
+
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const targetIndex = (startY * canvas.width + startX) * 4;
+  const targetColor = {
+    r: image.data[targetIndex],
+    g: image.data[targetIndex + 1],
+    b: image.data[targetIndex + 2],
+    a: image.data[targetIndex + 3]
+  };
+
+  if (colorsClose(targetColor, { ...fillColor, a: 255 }, 16)) {
+    return;
+  }
+
+  const tolerance = 42;
+  const visited = new Uint8Array(canvas.width * canvas.height);
+  const stack = [[startX, startY]];
+  const segments = [];
+  const maxSegments = Math.floor(strokePointLimits.fill / 2);
+
+  while (stack.length && segments.length < maxSegments) {
+    const [seedX, seedY] = stack.pop();
+    let left = seedX;
+    let right = seedX;
+
+    while (left >= 0 && pixelMatchesFill(image.data, canvas.width, left, seedY, targetColor, tolerance, visited)) {
+      left -= 1;
+    }
+    left += 1;
+
+    while (right < canvas.width && pixelMatchesFill(image.data, canvas.width, right, seedY, targetColor, tolerance, visited)) {
+      right += 1;
+    }
+    right -= 1;
+
+    if (left > right) {
+      continue;
+    }
+
+    segments.push([
+      [left / canvas.width, seedY / canvas.height],
+      [right / canvas.width, seedY / canvas.height]
+    ]);
+
+    for (let x = left; x <= right; x += 1) {
+      visited[seedY * canvas.width + x] = 1;
+
+      const upY = seedY - 1;
+      const downY = seedY + 1;
+      if (upY >= 0 && pixelMatchesFill(image.data, canvas.width, x, upY, targetColor, tolerance, visited)) {
+        stack.push([x, upY]);
+      }
+      if (downY < canvas.height && pixelMatchesFill(image.data, canvas.width, x, downY, targetColor, tolerance, visited)) {
+        stack.push([x, downY]);
+      }
+    }
+  }
+
+  if (!segments.length) {
+    return;
+  }
+
+  if (segments.length >= maxSegments) {
+    alert("Zone trop complexe a remplir en une fois.");
+    return;
+  }
+
+  const fillStroke = prepareStrokeForSend({
+    color: elements.drawColor.value,
+    width: 2,
+    mode: "fill",
+    points: segments.flat()
+  });
+
+  queuePendingDrawing(fillStroke);
+  void sendDrawingStroke(fillStroke, autoSaveDrawing && isMj());
+}
+
+function pixelMatchesFill(data, width, x, y, targetColor, tolerance, visited) {
+  const pixelPosition = y * width + x;
+  if (visited[pixelPosition]) {
+    return false;
+  }
+
+  const index = pixelPosition * 4;
+  const color = {
+    r: data[index],
+    g: data[index + 1],
+    b: data[index + 2],
+    a: data[index + 3]
+  };
+  return colorsClose(color, targetColor, tolerance);
+}
+
+function colorsClose(first, second, tolerance) {
+  return (
+    Math.abs(first.r - second.r) <= tolerance &&
+    Math.abs(first.g - second.g) <= tolerance &&
+    Math.abs(first.b - second.b) <= tolerance &&
+    Math.abs((first.a ?? 255) - (second.a ?? 255)) <= tolerance
+  );
+}
+
+function hexToRgb(color) {
+  const clean = normalizeHexColor(color);
+  if (!clean) {
+    return null;
+  }
+  return {
+    r: Number.parseInt(clean.slice(1, 3), 16),
+    g: Number.parseInt(clean.slice(3, 5), 16),
+    b: Number.parseInt(clean.slice(5, 7), 16)
+  };
+}
+
 function continueDrawing(event) {
   if (!isDrawing || !currentStroke) {
     return;
@@ -2370,7 +2525,7 @@ function finishDrawing() {
 
   isDrawing = false;
   if (currentStroke.points.length > 1) {
-    const finishedStroke = cloneStroke(currentStroke);
+    const finishedStroke = prepareStrokeForSend(currentStroke);
     queuePendingDrawing(finishedStroke);
     void sendDrawingStroke(finishedStroke, autoSaveDrawing && isMj());
   }
@@ -2382,7 +2537,7 @@ function cloneStroke(stroke) {
 }
 
 function queuePendingDrawing(stroke) {
-  const pendingStroke = cloneStroke(stroke);
+  const pendingStroke = prepareStrokeForSend(stroke);
   pendingStroke.pendingFingerprint = strokeFingerprint(pendingStroke);
   pendingDrawingStrokes.push(pendingStroke);
   pendingDrawingStrokes = pendingDrawingStrokes.slice(-30);
@@ -2390,8 +2545,9 @@ function queuePendingDrawing(stroke) {
 }
 
 async function sendDrawingStroke(stroke, shouldAutoSave = false) {
-  const fingerprint = strokeFingerprint(stroke);
-  const result = await action("drawStroke", { stroke });
+  const cleanStroke = prepareStrokeForSend(stroke);
+  const fingerprint = strokeFingerprint(cleanStroke);
+  const result = await action("drawStroke", { stroke: cleanStroke });
 
   if (!result) {
     pendingDrawingStrokes = pendingDrawingStrokes.filter((pending) => pending.pendingFingerprint !== fingerprint);
@@ -2413,7 +2569,13 @@ function reconcilePendingDrawings() {
   }
 
   const serverFingerprints = new Set((state?.drawings || []).map(strokeFingerprint));
-  pendingDrawingStrokes = pendingDrawingStrokes.filter((stroke) => !serverFingerprints.has(stroke.pendingFingerprint || strokeFingerprint(stroke)));
+  const serverClientIds = new Set((state?.drawings || []).map((stroke) => stroke.clientStrokeId).filter(Boolean));
+  pendingDrawingStrokes = pendingDrawingStrokes.filter((stroke) => {
+    if (stroke.clientStrokeId && serverClientIds.has(stroke.clientStrokeId)) {
+      return false;
+    }
+    return !serverFingerprints.has(stroke.pendingFingerprint || strokeFingerprint(stroke));
+  });
 }
 
 function strokeFingerprint(stroke) {
@@ -2426,6 +2588,25 @@ function strokeFingerprint(stroke) {
     Math.round(Number(stroke.width || 0)),
     points
   ].join("|");
+}
+
+function prepareStrokeForSend(stroke) {
+  const cleanStroke = cloneStroke(stroke);
+  const mode = cleanStroke.mode === "bucket" ? "fill" : cleanStroke.mode || "pen";
+  const limit = strokePointLimits[mode] || 900;
+
+  cleanStroke.mode = mode;
+  cleanStroke.clientStrokeId ||= crypto.randomUUID();
+  cleanStroke.color = normalizeHexColor(cleanStroke.color) || "#1f2933";
+  cleanStroke.width = Math.round(clamp(Number(cleanStroke.width || 8), 1, 36));
+  cleanStroke.points = Array.isArray(cleanStroke.points)
+    ? cleanStroke.points
+        .slice(0, limit)
+        .map((point) => [clamp(Number(point[0]), 0, 1), clamp(Number(point[1]), 0, 1)])
+        .filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]))
+    : [];
+
+  return cleanStroke;
 }
 
 function pointInCanvas(event) {
@@ -2559,6 +2740,11 @@ function drawStroke(context, canvas, stroke) {
     return;
   }
 
+  if (stroke.mode === "fill") {
+    drawFillStroke(context, canvas, stroke);
+    return;
+  }
+
   context.save();
   context.lineCap = "round";
   context.lineJoin = "round";
@@ -2571,6 +2757,33 @@ function drawStroke(context, canvas, stroke) {
 
   for (const point of points.slice(1)) {
     context.lineTo(point[0] * canvas.width, point[1] * canvas.height);
+  }
+
+  context.stroke();
+  context.restore();
+}
+
+function drawFillStroke(context, canvas, stroke) {
+  const points = stroke.points || [];
+  if (points.length < 2) {
+    return;
+  }
+
+  context.save();
+  context.lineCap = "butt";
+  context.lineJoin = "miter";
+  context.lineWidth = Math.max(1.5, canvas.height / 760);
+  context.strokeStyle = stroke.color;
+  context.globalAlpha = 0.94;
+  context.globalCompositeOperation = "source-over";
+  context.beginPath();
+
+  for (let index = 0; index < points.length - 1; index += 2) {
+    const start = points[index];
+    const end = points[index + 1];
+    const y = start[1] * canvas.height;
+    context.moveTo(start[0] * canvas.width, y);
+    context.lineTo(end[0] * canvas.width, y);
   }
 
   context.stroke();
