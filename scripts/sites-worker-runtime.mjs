@@ -855,9 +855,11 @@ function tokenFromPayload(payload, existing, actor) {
 
 function sanitizeStroke(payload, actor) {
   const data = payload.stroke || {};
+  const mode = ["pen", "marker", "erase", "fill"].includes(data.mode) ? data.mode : "pen";
+  const pointLimit = mode === "fill" ? 8000 : 900;
   const points = Array.isArray(data.points)
     ? data.points
-        .slice(0, 900)
+        .slice(0, pointLimit)
         .map((point) => [clamp(point[0], 0, 1), clamp(point[1], 0, 1)])
         .filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]))
     : [];
@@ -866,10 +868,11 @@ function sanitizeStroke(payload, actor) {
   }
   return {
     id: crypto.randomUUID(),
+    clientStrokeId: sanitizeText(data.clientStrokeId, 80),
     author: actor.name,
     color: sanitizeColor(data.color, "#1f2933"),
-    width: clampInt(data.width, 2, 36),
-    mode: ["pen", "marker", "erase"].includes(data.mode) ? data.mode : "pen",
+    width: clampInt(data.width, 1, 36),
+    mode,
     points,
     createdAt: new Date().toISOString()
   };
