@@ -1,0 +1,18 @@
+{
+  "name": "table-jdr-live",
+  "version": "1.0.0",
+  "description": "Table de jeu de role collaborative avec des, fiches de personnages et dessin partage.",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "keywords": [
+    "jdr",
+    "rpg",
+    "table",
+    "des"
+  ],
+  "author": "",
+  "license": "MIT"
+}
