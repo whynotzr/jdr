@@ -33,6 +33,7 @@ let activeNoteTab = "notes";
 let collapsedCharacters = readStoredJson("jdr-collapsed-characters") || {};
 let autoSaveDrawing = localStorage.getItem("jdr-auto-save-drawing") === "true";
 let lastDiceConfig = readStoredJson("jdr-last-dice-config") || null;
+let lastPlayersRenderKey = "";
 
 function readStoredJson(key) {
   try {
@@ -1315,7 +1316,22 @@ function playTableFx(fx) {
 function renderPlayers() {
   const players = state.participants || [];
   const onlineCount = players.filter((player) => player.online).length;
+  const renderKey = [
+    state.code,
+    session?.clientId || "",
+    isMj() ? "mj" : "player",
+    state.turn?.id || "",
+    players
+      .map((player) => [player.id, player.name, player.role, player.online ? "online" : "offline", player.color].join(":"))
+      .join("|")
+  ].join("||");
+
   elements.playerCount.textContent = onlineCount;
+
+  if (renderKey === lastPlayersRenderKey) {
+    return;
+  }
+  lastPlayersRenderKey = renderKey;
 
   if (players.length === 0) {
     elements.playerList.innerHTML = `<div class="empty-state">Personne connecte.</div>`;
