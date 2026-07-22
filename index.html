@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>JDR</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="login-screen" id="loginScreen">
+      <div class="login-ambient" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="login-panel lobby-panel">
+        <p class="eyebrow">Table de jeu partagee</p>
+        <h1>JDR</h1>
+        <p class="login-subtitle">Le MJ cree ou retrouve une table sauvegardee, puis partage un lien aux joueurs.</p>
+
+        <div class="resume-session-card" id="resumeSessionCard" hidden>
+          <div>
+            <span class="tiny-label">Session locale</span>
+            <strong id="resumeSessionLabel">Table sauvegardee</strong>
+          </div>
+          <div class="resume-actions">
+            <button class="ghost-button" id="resumeSessionButton" type="button">Reprendre</button>
+            <button class="ghost-button" id="clearResumeSessionButton" type="button">Oublier</button>
+          </div>
+        </div>
+
+        <div class="lobby-grid">
+          <section class="lobby-card mj-lobby-card">
+            <div class="lobby-card-head">
+              <span class="tiny-label">MJ</span>
+              <h2>Creer ou ouvrir une table</h2>
+            </div>
+            <form class="mj-account-form" id="mjAccountForm">
+              <label>
+                Nom affiche du MJ
+                <input id="mjDisplayName" maxlength="40" autocomplete="nickname" required placeholder="Ex: Maitre du jeu">
+              </label>
+              <div class="editor-grid">
+                <label>
+                  Compte MJ
+                  <input id="mjUsername" maxlength="32" autocomplete="username" required placeholder="ex: kean_mj">
+                </label>
+                <label>
+                  Mot de passe
+                  <input id="mjPassword" type="password" minlength="4" autocomplete="current-password" required>
+                </label>
+              </div>
+              <div class="room-create-row">
+                <label>
+                  Code de table
+                  <input id="mjRoom" maxlength="24" value="TABLE-1" required>
+                </label>
+                <button class="ghost-button" id="createRoomButton" type="button">Code</button>
+              </div>
+              <div class="lobby-actions">
+                <button class="primary-button" type="submit">Ouvrir la table</button>
+                <button class="ghost-button" id="loadMjRoomsButton" type="button">Mes tables</button>
+              </div>
+            </form>
+            <div class="mj-account-status" id="mjAccountStatus">Si le compte n'existe pas, il sera cree avec ce mot de passe.</div>
+            <div class="mj-rooms-list" id="mjRoomsList"></div>
+          </section>
+
+          <form class="lobby-card player-lobby-card" id="loginForm">
+            <div class="lobby-card-head">
+              <span class="tiny-label">Joueur</span>
+              <h2>Rejoindre une table</h2>
+            </div>
+            <label>
+              Ton nom
+              <input id="loginName" name="name" maxlength="40" autocomplete="nickname" required placeholder="Ex: Kean">
+            </label>
+            <label>
+              Code de salle
+              <input id="loginRoom" name="room" maxlength="24" value="TABLE-1" required>
+            </label>
+            <input type="hidden" name="role" value="Joueur">
+            <div class="login-invite-card">
+              <span class="tiny-label">Lien de cette salle</span>
+              <div class="invite-link-row">
+                <input id="loginInviteLink" readonly aria-label="Lien d'invitation">
+                <button class="ghost-button" id="copyLoginInviteButton" type="button">Copier</button>
+              </div>
+            </div>
+            <button class="primary-button" type="submit">Entrer comme joueur</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <main class="app-shell" id="app" hidden>
+      <div class="table-fx-layer" id="tableFxLayer" aria-hidden="true"></div>
+      <div class="turn-toast" id="turnToast" hidden>
+        <span class="avatar small" id="turnToastAvatar">?</span>
+        <strong id="turnToastText">Droit de lancer</strong>
+      </div>
+      <aside class="party-sidebar">
+        <section class="brand-panel">
+          <p class="eyebrow">Salle <span id="roomLabel">TABLE-1</span></p>
+          <h1>JDR</h1>
+          <div class="session-pill">
+            <span class="status-dot" id="statusDot"></span>
+            <span class="avatar small" id="sessionAvatar">?</span>
+            <span id="sessionLabel">Connexion...</span>
+            <button class="session-switch" id="logoutButton" type="button">Changer</button>
+          </div>
+          <div class="invite-card">
+            <div class="invite-card-head">
+              <span class="tiny-label">Invitation</span>
+              <strong id="roomCodeDisplay">TABLE-1</strong>
+            </div>
+            <div class="invite-link-row">
+              <input id="inviteLink" readonly aria-label="Lien de salle">
+              <button class="ghost-button" id="copyInviteButton" type="button">Copier</button>
+            </div>
+            <div class="network-links" id="networkLinks"></div>
+          </div>
+        </section>
+
+        <section class="turn-card">
+          <span class="tiny-label">Droit de lancer</span>
+          <div class="turn-face">
+            <span class="avatar" id="turnAvatar">?</span>
+            <strong id="turnLabel">MJ en attente</strong>
+          </div>
+          <div class="turn-actions">
+            <button class="ghost-button" id="prevTurnButton" type="button">Joueur precedent</button>
+            <button class="ghost-button" id="nextTurnButton" type="button">Joueur suivant</button>
+          </div>
+        </section>
+
+        <section class="sidebar-section players-block">
+          <div class="section-heading">
+            <h2>Joueurs</h2>
+            <span class="count-pill" id="playerCount">0</span>
+          </div>
+          <div class="player-list" id="playerList"></div>
+        </section>
+      </aside>
+
+      <section class="table-main">
+        <header class="table-header command-header">
+          <section class="terminal-log-panel" aria-label="Historique des jets">
+            <div class="terminal-head">
+              <span>LOG DES JETS</span>
+              <span>SYNC LIVE</span>
+            </div>
+            <div class="top-dice-terminal" id="topDiceTerminal">
+              <div class="terminal-line muted">&gt; En attente du premier lancer...</div>
+            </div>
+          </section>
+          <section class="digital-clock-panel" id="gameClock" aria-label="Horloge du JDR">
+            <span class="tiny-label">Heure JDR</span>
+            <strong class="digital-clock-readout" id="gameClockDisplay">08:00</strong>
+            <span id="gameClockWeather" hidden>Temps couvert - 8C</span>
+            <span id="gameClockMoment" hidden>Matin</span>
+            <span id="gameClockRisk" hidden>Bruit faible - Menace moyenne</span>
+            <div class="clock-controls digital-clock-controls" id="gameClockControls">
+              <input id="gameDayInput" type="hidden" min="1" max="9999" value="1" aria-label="Jour de survie">
+              <input id="gameClockInput" type="time" value="08:00" aria-label="Regler l'heure du JDR">
+              <input id="gameWeatherInput" type="hidden" maxlength="40" value="Temps couvert" aria-label="Meteo">
+              <input id="gameTemperatureInput" type="hidden" min="-40" max="60" value="8" aria-label="Temperature">
+              <select id="gameNoiseInput" hidden aria-label="Niveau de bruit">
+                <option value="faible">Bruit faible</option>
+                <option value="moyen">Bruit moyen</option>
+                <option value="fort">Bruit fort</option>
+              </select>
+              <select id="gameThreatInput" hidden aria-label="Niveau de menace">
+                <option value="basse">Menace basse</option>
+                <option value="moyenne">Menace moyenne</option>
+                <option value="haute">Menace haute</option>
+                <option value="extreme">Menace extreme</option>
+              </select>
+              <button class="mini-button" id="clockMinusButton" type="button">-10</button>
+              <button class="mini-button" id="clockPlusButton" type="button">+10</button>
+              <button class="mini-button" id="clockHourButton" type="button">+1H</button>
+            </div>
+          </section>
+          <div class="top-hidden-controls" hidden>
+            <button class="mini-button" id="toggleLeftColumnButton" type="button" title="Masquer ou afficher la colonne gauche">Gauche</button>
+            <button class="mini-button" id="toggleRightColumnButton" type="button" title="Masquer ou afficher la colonne droite">Droite</button>
+            <div class="scene-display" id="sceneDisplay">
+              <span class="scene-mood" id="sceneMoodLabel">Donjon</span>
+              <strong id="sceneTitleLabel">Scene en cours</strong>
+              <span class="threat-dots" id="threatDots" aria-label="Niveau de menace"></span>
+            </div>
+          </div>
+        </header>
+
+        <section class="stage-panel">
+          <div class="scene-notice" id="sceneNotice" hidden></div>
+          <div class="tabletop-frame" id="drawView">
+            <div class="draw-toolbar">
+              <span class="toolbar-label">Outils de dessin</span>
+              <div class="tool-group" aria-label="Outils">
+                <button class="tool-button active" id="penTool" type="button">Crayon</button>
+                <button class="tool-button" id="markerTool" type="button">Marqueur</button>
+                <button class="tool-button" id="eraseTool" type="button">Gomme</button>
+                <button class="tool-button" id="eyedropperTool" type="button">Pipette</button>
+              </div>
+              <div class="palette-strip" aria-label="Palette">
+                <div class="swatch-row" id="colorSwatches" aria-label="Couleurs">
+                  <button class="swatch active" style="--swatch-color:#8b1f1f" data-color="#8b1f1f" type="button" title="Alerte"></button>
+                  <button class="swatch" style="--swatch-color:#344b5a" data-color="#344b5a" type="button" title="Acier"></button>
+                  <button class="swatch" style="--swatch-color:#b89b4c" data-color="#b89b4c" type="button" title="Marqueur use"></button>
+                  <button class="swatch" style="--swatch-color:#9fc7a5" data-color="#9fc7a5" type="button" title="Vert pale"></button>
+                  <button class="swatch" style="--swatch-color:#151817" data-color="#151817" type="button" title="Charbon"></button>
+                  <button class="swatch white" style="--swatch-color:#d8c9a8" data-color="#d8c9a8" type="button" title="Papier sale"></button>
+                  <button class="swatch" style="--swatch-color:#6c4d32" data-color="#6c4d32" type="button" title="Terre"></button>
+                  <button class="swatch" style="--swatch-color:#6c7169" data-color="#6c7169" type="button" title="Beton"></button>
+                  <button class="swatch" style="--swatch-color:#7fb7b0" data-color="#7fb7b0" type="button" title="Signal"></button>
+                  <button class="swatch" style="--swatch-color:#4c5a37" data-color="#4c5a37" type="button" title="Militaire"></button>
+                  <button class="swatch" style="--swatch-color:#b45f2a" data-color="#b45f2a" type="button" title="Rouille"></button>
+                  <button class="swatch" style="--swatch-color:#5e1219" data-color="#5e1219" type="button" title="Sang sombre"></button>
+                  <button class="swatch" style="--swatch-color:#0b0f0d" data-color="#0b0f0d" type="button" title="Nuit"></button>
+                  <button class="swatch" style="--swatch-color:#c1b38f" data-color="#c1b38f" type="button" title="Carte"></button>
+                </div>
+              </div>
+              <div class="color-control">
+                <span class="current-color" id="currentColorPreview" style="--current-color:#8b1f1f" aria-hidden="true"></span>
+                <input id="drawColor" type="color" value="#8b1f1f" aria-label="Couleur libre">
+              </div>
+              <label class="range-label">
+                Taille
+                <input id="drawSize" type="range" min="2" max="36" value="8">
+              </label>
+              <div class="draw-actions">
+                <button class="ghost-button" id="undoDrawingButton" type="button">Annuler</button>
+                <button class="ghost-button" id="redoDrawingButton" type="button">Retablir</button>
+                <button class="ghost-button" id="clearDrawingButton" type="button">Effacer</button>
+              </div>
+              <div class="map-actions" aria-label="Carte">
+                <button class="mini-button" id="zoomOutButton" type="button" title="Zoom arriere">-</button>
+                <button class="mini-button" id="zoomResetButton" type="button" title="Reinitialiser le zoom">1:1</button>
+                <button class="mini-button" id="zoomInButton" type="button" title="Zoom avant">+</button>
+                <button class="mini-button" id="centerMapButton" type="button">Centrer</button>
+                <button class="mini-button" id="fullscreenMapButton" type="button">Plein ecran</button>
+              </div>
+            </div>
+            <canvas class="draw-canvas" id="drawCanvas" width="1500" height="760"></canvas>
+          </div>
+        </section>
+
+        <section class="dice-panel">
+          <div class="dice-left">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">Tapis de des</p>
+                <h2>Jets de des</h2>
+              </div>
+              <button class="mini-button" id="clearDiceButton" type="button">Vider</button>
+            </div>
+            <div class="red-dice-tray" id="diceAnimationArea">
+              <div class="roll-banner" id="rollerBadge">
+                <span class="avatar" id="rollerAvatar">?</span>
+                <span id="rollerText">En attente du prochain jet</span>
+              </div>
+              <div class="dice-stage" id="diceStage">
+                <div class="idle-dice">D20</div>
+              </div>
+              <div class="roll-result" id="rollResult">Le MJ autorise un joueur, puis le droit disparait apres son jet.</div>
+            </div>
+          </div>
+
+          <div class="dice-right">
+            <label class="dice-select-field">
+              De
+              <select id="diceSelect" class="dice-select" aria-label="Choisir le de"></select>
+            </label>
+            <form class="custom-die-form" id="customDieForm">
+              <label>
+                De perso
+                <input id="customDieSides" type="number" min="2" max="1000" placeholder="ex: 12" aria-label="Nombre de faces du de perso">
+              </label>
+              <button class="ghost-button" id="addCustomDieButton" type="submit">Ajouter</button>
+            </form>
+            <div class="dice-controls">
+              <label>
+                Des
+                <input id="diceCount" type="number" min="1" max="20" value="1">
+              </label>
+              <label>
+                Mod
+                <input id="diceModifier" type="number" min="-99" max="99" value="0">
+              </label>
+              <label>
+                Fois
+                <input id="diceRepeat" type="number" min="1" max="12" value="1">
+              </label>
+              <button class="primary-button roll-button" id="rollButton" type="button">Lancer</button>
+              <button class="ghost-button reroll-button" id="rerollButton" type="button">Relancer</button>
+            </div>
+          <div class="dice-log" id="diceLog"></div>
+          </div>
+        </section>
+      </section>
+
+      <aside class="right-sidebar">
+        <section class="sidebar-section sheet-editor-card" id="sheetEditorCard">
+          <div class="section-heading">
+            <h2 id="sheetEditorTitle">Fiche</h2>
+            <button class="mini-button" id="closeCharacterEditor" type="button">Fermer</button>
+          </div>
+          <p class="permission-note" id="characterPermissionNote"></p>
+          <form class="character-editor" id="characterForm">
+            <input type="hidden" id="characterId">
+            <div class="editor-grid">
+              <label>Nom<input id="characterName" required maxlength="60"></label>
+              <label>Joueur<input id="characterPlayer" maxlength="50"></label>
+              <label>Classe<input id="characterArchetype" maxlength="70"></label>
+              <label>Niveau<input id="characterLevel" maxlength="20"></label>
+              <div class="editor-vitals" aria-label="PV et stamina">
+                <label class="editor-vital pv">
+                  <span>PV</span>
+                  <div class="editor-vital-control">
+                    <input id="characterPv" type="number" min="0" max="12" value="4" aria-label="PV actuels">
+                    <strong>/</strong>
+                    <input id="characterPvMax" type="number" min="1" max="12" value="4" aria-label="PV maximum">
+                  </div>
+                </label>
+                <label class="editor-vital stamina">
+                  <span>Stamina</span>
+                  <div class="editor-vital-control">
+                    <input id="characterStamina" type="number" min="0" max="12" value="4" aria-label="Stamina actuelle">
+                    <strong>/</strong>
+                    <input id="characterStaminaMax" type="number" min="1" max="12" value="4" aria-label="Stamina maximum">
+                  </div>
+                </label>
+              </div>
+              <div class="stat-editor-grid" aria-label="Stats principales sur 20">
+                <label>Force /20<input id="statForce" type="number" min="0" max="20" value="10"></label>
+                <label>Agilite /20<input id="statAgilite" type="number" min="0" max="20" value="10"></label>
+                <label>Resistance /20<input id="statResistance" type="number" min="0" max="20" value="10"></label>
+                <label>Perception /20<input id="statPerception" type="number" min="0" max="20" value="10"></label>
+                <label>Intelligence /20<input id="statIntelligence" type="number" min="0" max="20" value="10"></label>
+                <label>Charisme /20<input id="statCharisme" type="number" min="0" max="20" value="10"></label>
+              </div>
+            </div>
+            <label>Equipement<textarea id="characterEquipment" rows="3"></textarea></label>
+            <label>Notes<textarea id="characterNotes" rows="4"></textarea></label>
+            <div class="editor-actions">
+              <button class="primary-button" id="saveCharacterButton" type="submit">Sauvegarder</button>
+              <button class="ghost-button" id="resetCharacterForm" type="button">Nouvelle</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="sidebar-section gm-tools">
+          <div class="section-heading">
+            <h2>Plans sauvegardes</h2>
+          </div>
+          <div class="saved-drawing-tools">
+            <input id="savedDrawingName" maxlength="60" placeholder="Nom du plan" aria-label="Nom du dessin sauvegarde">
+            <button class="primary-button" id="saveDrawingButton" type="button">Sauver</button>
+            <select id="savedDrawingSelect" aria-label="Dessins sauvegardes"></select>
+            <div class="split-actions">
+              <button class="ghost-button" id="loadDrawingButton" type="button">Charger</button>
+              <button class="ghost-button" id="duplicateSavedDrawingButton" type="button">Dupliquer</button>
+              <button class="ghost-button" id="deleteSavedDrawingButton" type="button">Suppr</button>
+            </div>
+            <label class="autosave-toggle">
+              <input id="autoSaveDrawingToggle" type="checkbox">
+              Sauvegarde auto
+            </label>
+            <div class="saved-drawing-list" id="savedDrawingList"></div>
+          </div>
+        </section>
+
+        <section class="sidebar-section character-data-panel">
+          <div class="section-heading">
+            <h2>Fiches detaillees</h2>
+            <button class="icon-button" id="newCharacterButton" type="button" title="Nouvelle fiche">+</button>
+          </div>
+          <div class="character-details-list" id="characterDetailsPanel"></div>
+          <div class="legacy-notes-controls" hidden>
+            <button class="mini-button" id="quickNoteButton" type="button">+ Note</button>
+            <div class="note-tabs" id="noteTabs" aria-label="Onglets du carnet">
+              <button class="note-tab active" data-note-tab="notes" type="button">Notes</button>
+              <button class="note-tab" data-note-tab="objectives" type="button">Objectifs</button>
+              <button class="note-tab" data-note-tab="clues" type="button">Indices</button>
+              <button class="note-tab" data-note-tab="dangers" type="button">Dangers</button>
+              <button class="note-tab secret" data-note-tab="secrets" type="button">Secrets MJ</button>
+            </div>
+            <label class="notes-block">
+              <span id="activeNoteLabel">Notes</span>
+              <textarea id="boardNotes" rows="5"></textarea>
+            </label>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
