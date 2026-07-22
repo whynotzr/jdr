@@ -21,6 +21,8 @@ let session = readStoredJson("jdr-session");
 let mjAccount = readStoredJson("jdr-mj-account");
 let state = null;
 let eventSource = null;
+let liveSyncTimer = null;
+let liveSyncInFlight = false;
 let selectedDie = 20;
 let customDiceTypes = sanitizeCustomDice(readStoredJson("jdr-custom-dice"));
 let drawingMode = "pen";
@@ -339,7 +341,9 @@ function bindEvents() {
   elements.logoutButton.addEventListener("click", () => {
     if (eventSource) {
       eventSource.close();
+      eventSource = null;
     }
+    stopLiveSync();
     session = null;
     state = null;
     localStorage.removeItem("jdr-session");
@@ -348,6 +352,12 @@ function bindEvents() {
     elements.loginScreen.hidden = false;
     renderLobbyResume();
     elements.loginName.focus();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void fetchStateSnapshot();
+    }
   });
 
   elements.rollButton.addEventListener("click", () => {
@@ -789,27 +799,82 @@ function connectEvents() {
   if (eventSource) {
     eventSource.close();
   }
+  stopLiveSync();
 
   eventSource = new EventSource(apiUrl(`/api/events?room=${encodeURIComponent(session.room)}&clientId=${encodeURIComponent(session.clientId)}`));
   eventSource.addEventListener("open", () => {
     elements.statusDot.classList.add("online");
+    void fetchStateSnapshot();
   });
   eventSource.addEventListener("error", () => {
     elements.statusDot.classList.remove("online");
+    startLiveSync();
   });
   eventSource.addEventListener("state", (event) => {
-    const incomingState = JSON.parse(event.data);
-    if (!shouldAcceptState(incomingState)) {
-      return;
-    }
-    if (session?.clientId && !incomingState.participants?.some((player) => player.id === session.clientId)) {
-      handleSessionRemoved();
-      return;
-    }
-    state = incomingState;
-    reconcilePendingDrawings();
-    scheduleRender();
+    applyIncomingState(JSON.parse(event.data));
   });
+  startLiveSync();
+}
+
+function startLiveSync() {
+  if (liveSyncTimer || !session) {
+    return;
+  }
+
+  liveSyncTimer = setInterval(() => {
+    void fetchStateSnapshot();
+  }, 700);
+}
+
+function stopLiveSync() {
+  if (liveSyncTimer) {
+    clearInterval(liveSyncTimer);
+    liveSyncTimer = null;
+  }
+  liveSyncInFlight = false;
+}
+
+async function fetchStateSnapshot() {
+  if (!session || liveSyncInFlight || document.hidden) {
+    return;
+  }
+
+  const syncSession = { room: session.room, clientId: session.clientId };
+  liveSyncInFlight = true;
+  try {
+    const response = await fetch(apiUrl(`/api/state?room=${encodeURIComponent(syncSession.room)}&clientId=${encodeURIComponent(syncSession.clientId)}`), {
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      return;
+    }
+    const incomingState = await response.json();
+    if (!session || session.room !== syncSession.room || session.clientId !== syncSession.clientId) {
+      return;
+    }
+    applyIncomingState(incomingState);
+    elements.statusDot.classList.add("online");
+  } catch (error) {
+    elements.statusDot.classList.remove("online");
+  } finally {
+    liveSyncInFlight = false;
+  }
+}
+
+function applyIncomingState(incomingState) {
+  if (!incomingState) {
+    return;
+  }
+  if (!shouldAcceptState(incomingState)) {
+    return;
+  }
+  if (session?.clientId && !incomingState.participants?.some((player) => player.id === session.clientId)) {
+    handleSessionRemoved();
+    return;
+  }
+  state = incomingState;
+  reconcilePendingDrawings();
+  scheduleRender();
 }
 
 function handleSessionRemoved() {
@@ -817,6 +882,7 @@ function handleSessionRemoved() {
     eventSource.close();
     eventSource = null;
   }
+  stopLiveSync();
 
   session = null;
   state = null;
@@ -852,11 +918,7 @@ async function action(actionName, payload) {
     }
 
     if (body.state) {
-      if (shouldAcceptState(body.state)) {
-        state = body.state;
-        reconcilePendingDrawings();
-        scheduleRender();
-      }
+      applyIncomingState(body.state);
     }
     return body;
   } catch (error) {
@@ -866,7 +928,11 @@ async function action(actionName, payload) {
 }
 
 function shouldAcceptState(nextState) {
-  if (!state || !nextState) {
+  if (!nextState) {
+    return false;
+  }
+
+  if (!state) {
     return true;
   }
 
