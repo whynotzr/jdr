@@ -5952,7 +5952,7 @@ body {
 
 /* Drawing layout: compact tools, no map controls, no canvas overlap */
 .table-main {
-  grid-template-rows: 128px minmax(0, 1fr) clamp(184px, 24vh, 210px);
+  grid-template-rows: 128px minmax(0, 1fr) clamp(210px, 28vh, 236px);
 }
 
 .tabletop-frame {
@@ -6030,6 +6030,71 @@ body {
   transform: none;
 }
 
+/* Dice tray: keep the roll button visible on laptop screens */
+.dice-panel {
+  gap: 8px;
+  padding: 8px;
+}
+
+.dice-right {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 6px 8px;
+  overflow: visible;
+}
+
+.dice-select-field,
+.custom-die-form,
+.dice-controls {
+  min-width: 0;
+}
+
+.dice-select-field {
+  grid-column: 1;
+  gap: 3px;
+}
+
+.custom-die-form {
+  grid-column: 2;
+  grid-template-columns: minmax(0, 1fr) minmax(74px, 0.48fr);
+  align-self: end;
+  gap: 5px;
+}
+
+.dice-controls {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dice-controls label {
+  min-width: 0;
+  gap: 3px;
+}
+
+.dice-select,
+.custom-die-form input,
+.custom-die-form button,
+.dice-controls input {
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.roll-button,
+.reroll-button {
+  min-height: 37px;
+}
+
+.roll-button {
+  grid-column: span 2;
+}
+
+.reroll-button {
+  grid-column: span 1;
+}
+
 @media (max-width: 920px) {
   .draw-toolbar {
     grid-template-columns: 1fr;
@@ -6038,6 +6103,16 @@ body {
   .range-label,
   .draw-actions,
   .palette-strip {
+    grid-column: auto;
+  }
+
+  .dice-right {
+    grid-template-columns: 1fr;
+  }
+
+  .dice-select-field,
+  .custom-die-form,
+  .dice-controls {
     grid-column: auto;
   }
 }
