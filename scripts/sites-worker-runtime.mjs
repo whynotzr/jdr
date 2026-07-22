@@ -1121,6 +1121,7 @@ function handleAction(room, actor, action, payload) {
       room.activeFx = fxFromPayload(payload, actor);
       break;
     case "clearDiceLog":
+      requireMj(actor, "Seul le MJ peut vider l'historique des lancers.");
       room.diceLog = [];
       room.activeRoll = null;
       break;
