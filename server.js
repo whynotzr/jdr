@@ -1150,7 +1150,7 @@ const server = http.createServer(async (req, res) => {
         Connection: "keep-alive",
         "X-Accel-Buffering": "no"
       });
-      res.write("retry: 1500\n\n");
+      res.write("retry: 500\n\n");
 
       const subscriber = { res, clientId };
       addSubscriber(room.code, subscriber);

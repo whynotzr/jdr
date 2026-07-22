@@ -7,6 +7,9 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type"
 };
+const SSE_RETRY_MS = 500;
+const SSE_POLL_MS = 400;
+const SSE_MAX_TICKS = 700;
 const memoryStore = { rooms: {}, accounts: {}, initialized: false };
 
 const worker = {
@@ -78,8 +81,6 @@ const worker = {
         const viewer = room.participants[url.searchParams.get("clientId")] || null;
         if (viewer) {
           viewer.online = true;
-          viewer.lastSeen = new Date().toISOString();
-          await saveStore(env, store);
         }
         return jsonResponse(200, publicState(room, viewer));
       }
@@ -123,30 +124,19 @@ async function streamRoomState(request, env, ctx, url) {
   const encoder = new TextEncoder();
   let closed = false;
   let lastPayload = "";
-  let lastPresenceWrite = 0;
 
   const stream = new ReadableStream({
     async start(controller) {
-      controller.enqueue(encoder.encode("retry: 1500\n\n"));
-      for (let index = 0; index < 160 && !closed; index += 1) {
+      controller.enqueue(encoder.encode(`retry: ${SSE_RETRY_MS}\n\n`));
+      for (let index = 0; index < SSE_MAX_TICKS && !closed; index += 1) {
         try {
           const store = await loadStore(env);
           const room = ensureRoom(store, roomCode);
           const viewer = room.participants[clientId] || null;
           const now = Date.now();
-          let shouldSavePresence = false;
 
           if (viewer) {
             viewer.online = true;
-            if (now - lastPresenceWrite > 25000) {
-              viewer.lastSeen = new Date(now).toISOString();
-              lastPresenceWrite = now;
-              shouldSavePresence = true;
-            }
-          }
-
-          if (shouldSavePresence) {
-            await saveStore(env, store);
           }
 
           const snapshot = publicState(room, viewer);
@@ -161,7 +151,7 @@ async function streamRoomState(request, env, ctx, url) {
           controller.enqueue(encoder.encode(formatSse("error", { error: error?.message || "Erreur" })));
         }
 
-        await delay(1500);
+        await delay(SSE_POLL_MS);
       }
       controller.close();
     },
