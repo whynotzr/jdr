@@ -7,6 +7,9 @@ const characterStatDefinitions = [
   { key: "intelligence", label: "Intelligence", legacy: ["esprit", "magie"] },
   { key: "charisme", label: "Charisme", legacy: ["social"] }
 ];
+const remoteApiOrigin = "https://jdr-kean-cheri.marckjean1310.chatgpt.site";
+const isGithubPages = window.location.hostname.endsWith(".github.io");
+const apiBase = isGithubPages ? remoteApiOrigin : "";
 
 let session = readStoredJson("jdr-session");
 let mjAccount = readStoredJson("jdr-mj-account");
@@ -38,6 +41,10 @@ function readStoredJson(key) {
     localStorage.removeItem(key);
     return null;
   }
+}
+
+function apiUrl(path) {
+  return `${apiBase}${path}`;
 }
 
 function sanitizeCustomDice(values) {
@@ -296,7 +303,7 @@ function bindEvents() {
     elements.loginRoom.value = sanitizeRoomClient(elements.loginRoom.value) || "TABLE-1";
     const formData = new FormData(elements.loginForm);
 
-    const response = await fetch("/api/login", {
+    const response = await fetch(apiUrl("/api/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -639,7 +646,7 @@ function mjLobbyPayload(room = elements.mjRoom.value) {
 
 async function openMjTable(room) {
   setMjLobbyStatus("Ouverture de la table...");
-  const response = await fetch("/api/mj/open", {
+  const response = await fetch(apiUrl("/api/mj/open"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(mjLobbyPayload(room))
@@ -656,7 +663,7 @@ async function openMjTable(room) {
 
 async function loadMjRooms() {
   setMjLobbyStatus("Verification du compte MJ...");
-  const response = await fetch("/api/mj/rooms", {
+  const response = await fetch(apiUrl("/api/mj/rooms"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -757,7 +764,7 @@ function connectEvents() {
     eventSource.close();
   }
 
-  eventSource = new EventSource(`/api/events?room=${encodeURIComponent(session.room)}&clientId=${encodeURIComponent(session.clientId)}`);
+  eventSource = new EventSource(apiUrl(`/api/events?room=${encodeURIComponent(session.room)}&clientId=${encodeURIComponent(session.clientId)}`));
   eventSource.addEventListener("open", () => {
     elements.statusDot.classList.add("online");
   });
@@ -797,7 +804,7 @@ async function action(actionName, payload) {
   }
 
   try {
-    const response = await fetch("/api/action", {
+    const response = await fetch(apiUrl("/api/action"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1060,7 +1067,7 @@ function drawingThumbnail() {
 
 async function loadServerInfo() {
   try {
-    const response = await fetch("/api/info");
+    const response = await fetch(apiUrl("/api/info"));
     if (!response.ok) {
       return;
     }
@@ -1110,6 +1117,12 @@ function randomRoomCode() {
 
 function preferredInviteBase() {
   const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+  if (isGithubPages) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  }
   if (localHosts.has(window.location.hostname) && serverInfo.networkUrls?.length) {
     return serverInfo.networkUrls[0];
   }
