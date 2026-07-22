@@ -34,6 +34,7 @@ let collapsedCharacters = readStoredJson("jdr-collapsed-characters") || {};
 let autoSaveDrawing = localStorage.getItem("jdr-auto-save-drawing") === "true";
 let lastDiceConfig = readStoredJson("jdr-last-dice-config") || null;
 let lastPlayersRenderKey = "";
+let pendingDrawingStrokes = [];
 
 function readStoredJson(key) {
   try {
@@ -774,11 +775,15 @@ function connectEvents() {
   });
   eventSource.addEventListener("state", (event) => {
     const incomingState = JSON.parse(event.data);
+    if (!shouldAcceptState(incomingState)) {
+      return;
+    }
     if (session?.clientId && !incomingState.participants?.some((player) => player.id === session.clientId)) {
       handleSessionRemoved();
       return;
     }
     state = incomingState;
+    reconcilePendingDrawings();
     render();
   });
 }
@@ -819,16 +824,34 @@ async function action(actionName, payload) {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       alert(body.error || "Action impossible");
-      return;
+      return null;
     }
 
     if (body.state) {
-      state = body.state;
-      render();
+      if (shouldAcceptState(body.state)) {
+        state = body.state;
+        reconcilePendingDrawings();
+        render();
+      }
     }
+    return body;
   } catch (error) {
     alert("Connexion au serveur perdue. Recharge la page si besoin.");
+    return null;
   }
+}
+
+function shouldAcceptState(nextState) {
+  if (!state || !nextState) {
+    return true;
+  }
+
+  return stateTime(nextState) >= stateTime(state);
+}
+
+function stateTime(value) {
+  const time = new Date(value?.updatedAt || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
 }
 
 function render() {
@@ -2284,14 +2307,62 @@ function finishDrawing() {
 
   isDrawing = false;
   if (currentStroke.points.length > 1) {
-    action("drawStroke", { stroke: currentStroke });
-    if (autoSaveDrawing && isMj()) {
-      setTimeout(() => {
-        action("saveDrawing", { name: "Sauvegarde auto", thumbnail: drawingThumbnail() });
-      }, 650);
-    }
+    const finishedStroke = cloneStroke(currentStroke);
+    queuePendingDrawing(finishedStroke);
+    void sendDrawingStroke(finishedStroke, autoSaveDrawing && isMj());
   }
   currentStroke = null;
+}
+
+function cloneStroke(stroke) {
+  return JSON.parse(JSON.stringify(stroke));
+}
+
+function queuePendingDrawing(stroke) {
+  const pendingStroke = cloneStroke(stroke);
+  pendingStroke.pendingFingerprint = strokeFingerprint(pendingStroke);
+  pendingDrawingStrokes.push(pendingStroke);
+  pendingDrawingStrokes = pendingDrawingStrokes.slice(-30);
+  renderDrawing();
+}
+
+async function sendDrawingStroke(stroke, shouldAutoSave = false) {
+  const fingerprint = strokeFingerprint(stroke);
+  const result = await action("drawStroke", { stroke });
+
+  if (!result) {
+    pendingDrawingStrokes = pendingDrawingStrokes.filter((pending) => pending.pendingFingerprint !== fingerprint);
+    renderDrawing();
+    return;
+  }
+
+  reconcilePendingDrawings();
+  renderDrawing();
+
+  if (shouldAutoSave) {
+    await action("saveDrawing", { name: "Sauvegarde auto", thumbnail: drawingThumbnail() });
+  }
+}
+
+function reconcilePendingDrawings() {
+  if (!pendingDrawingStrokes.length) {
+    return;
+  }
+
+  const serverFingerprints = new Set((state?.drawings || []).map(strokeFingerprint));
+  pendingDrawingStrokes = pendingDrawingStrokes.filter((stroke) => !serverFingerprints.has(stroke.pendingFingerprint || strokeFingerprint(stroke)));
+}
+
+function strokeFingerprint(stroke) {
+  const points = (stroke.points || [])
+    .map((point) => `${Number(point[0]).toFixed(4)},${Number(point[1]).toFixed(4)}`)
+    .join(";");
+  return [
+    stroke.mode || "pen",
+    normalizeHexColor(stroke.color) || stroke.color || "#1f2933",
+    Math.round(Number(stroke.width || 0)),
+    points
+  ].join("|");
 }
 
 function pointInCanvas(event) {
@@ -2308,7 +2379,8 @@ function renderDrawing(extraStroke = null) {
   context.clearRect(0, 0, canvas.width, canvas.height);
   fillDrawingBackground(context, canvas);
 
-  for (const stroke of [...(state?.drawings || []), extraStroke].filter(Boolean)) {
+  const liveStroke = extraStroke || (isDrawing ? currentStroke : null);
+  for (const stroke of [...(state?.drawings || []), ...pendingDrawingStrokes, liveStroke].filter(Boolean)) {
     drawStroke(context, canvas, stroke);
   }
 }

@@ -123,6 +123,8 @@ async function streamRoomState(request, env, ctx, url) {
   const clientId = url.searchParams.get("clientId");
   const encoder = new TextEncoder();
   let closed = false;
+  let lastPayload = "";
+  let lastPresenceWrite = 0;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -132,13 +134,30 @@ async function streamRoomState(request, env, ctx, url) {
           const store = await loadStore(env);
           const room = ensureRoom(store, roomCode);
           const viewer = room.participants[clientId] || null;
+          const now = Date.now();
+          let shouldSavePresence = false;
+
           if (viewer) {
             viewer.online = true;
-            viewer.lastSeen = new Date().toISOString();
-            touch(room);
+            if (now - lastPresenceWrite > 25000) {
+              viewer.lastSeen = new Date(now).toISOString();
+              lastPresenceWrite = now;
+              shouldSavePresence = true;
+            }
+          }
+
+          if (shouldSavePresence) {
             await saveStore(env, store);
           }
-          controller.enqueue(encoder.encode(formatSse("state", publicState(room, viewer))));
+
+          const snapshot = publicState(room, viewer);
+          const payload = JSON.stringify(snapshot);
+          if (payload !== lastPayload) {
+            lastPayload = payload;
+            controller.enqueue(encoder.encode(formatSseData("state", payload)));
+          } else {
+            controller.enqueue(encoder.encode(formatSse("ping", { time: now })));
+          }
         } catch (error) {
           controller.enqueue(encoder.encode(formatSse("error", { error: error?.message || "Erreur" })));
         }
@@ -185,15 +204,23 @@ async function markOffline(env, roomCode, clientId) {
   }
   participant.online = false;
   participant.lastSeen = new Date().toISOString();
+  let changedTurn = false;
   if (room.activeTurnPlayerId === participant.id) {
     clearTurn(room);
+    changedTurn = true;
   }
-  touch(room);
+  if (changedTurn) {
+    touch(room);
+  }
   await saveStore(env, store);
 }
 
 function formatSse(event, payload) {
   return "event: " + event + "\n" + "data: " + JSON.stringify(payload) + "\n\n";
+}
+
+function formatSseData(event, data) {
+  return "event: " + event + "\n" + "data: " + data + "\n\n";
 }
 
 function delay(ms) {
