@@ -403,6 +403,11 @@ function bindEvents() {
   });
 
   elements.clearDiceButton.addEventListener("click", () => {
+    if (!isMj()) {
+      alert("Seul le MJ peut vider l'historique des lancers.");
+      return;
+    }
+
     action("clearDiceLog", {});
   });
 
@@ -1105,6 +1110,10 @@ function renderPermissions() {
   elements.nextTurnButton.disabled = !mj;
   elements.rollButton.disabled = !canRoll;
   elements.rerollButton.disabled = !canRoll;
+  elements.clearDiceButton.disabled = !mj;
+  elements.clearDiceButton.title = mj
+    ? "Vider l'historique des lancers"
+    : "Seul le MJ peut vider l'historique des lancers.";
   elements.rollButton.textContent = canRoll ? (mj ? "Lancer MJ" : "Lancer une fois") : "Attend MJ";
   elements.gameClockControls.hidden = !mj;
   elements.drawView.classList.toggle("drawing-locked", !mj);
