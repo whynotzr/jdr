@@ -190,6 +190,7 @@ const elements = {
   resetCharacterForm: document.querySelector("#resetCharacterForm"),
   characterId: document.querySelector("#characterId"),
   characterName: document.querySelector("#characterName"),
+  characterColor: document.querySelector("#characterColor"),
   characterPlayer: document.querySelector("#characterPlayer"),
   characterArchetype: document.querySelector("#characterArchetype"),
   characterLevel: document.querySelector("#characterLevel"),
@@ -197,6 +198,8 @@ const elements = {
   characterPvMax: document.querySelector("#characterPvMax"),
   characterStamina: document.querySelector("#characterStamina"),
   characterStaminaMax: document.querySelector("#characterStaminaMax"),
+  characterStorage: document.querySelector("#characterStorage"),
+  characterStorageMax: document.querySelector("#characterStorageMax"),
   statForce: document.querySelector("#statForce"),
   statAgilite: document.querySelector("#statAgilite"),
   statResistance: document.querySelector("#statResistance"),
@@ -1395,7 +1398,7 @@ function renderCharacters() {
       const stamina = metricValue(character.stamina, staminaMax);
       const pvControls = vitalQuickControls(character.id, "pv");
       const staminaControls = vitalQuickControls(character.id, "stamina");
-      const ownerColor = participantColor(character.player) || colorFromString(character.name);
+      const ownerColor = character.color || participantColor(character.player) || colorFromString(character.name);
       const status = characterSurvivalStatus(character, pv, pvMax);
       const wounds = characterWounds(character);
       const talents = characterTalents(character);
@@ -1527,9 +1530,11 @@ function renderCharacterDetails() {
 function detailedCharacterCard(character) {
   const pvMax = metricMaxValue(character.pvMax, 4);
   const staminaMax = metricMaxValue(character.staminaMax, 4);
+  const storageMax = storageMaxValue(character.storageMax, 12);
   const pv = metricValue(character.pv, pvMax);
   const stamina = metricValue(character.stamina, staminaMax);
-  const ownerColor = participantColor(character.player) || colorFromString(character.name);
+  const storage = storageValue(character.storage, storageMax);
+  const ownerColor = character.color || participantColor(character.player) || colorFromString(character.name);
   const status = characterSurvivalStatus(character, pv, pvMax);
   const survival = characterSurvivalNeeds(character);
   const equipment = compactText(character.equipment || "Aucun equipement note");
@@ -1553,6 +1558,7 @@ function detailedCharacterCard(character) {
       <div class="detail-vitals">
         ${detailVital("PV", pv, pvMax, "pv")}
         ${detailVital("Stamina", stamina, staminaMax, "stamina")}
+        ${detailVital("Stockage", storage, storageMax, "storage")}
       </div>
       <div class="detail-status-grid">
         <span><small>Etat</small><strong>${escapeHtml(status.label)}</strong></span>
@@ -1596,7 +1602,7 @@ function detailStat(stat) {
 
 function detailVital(label, value, max, type) {
   return `
-    <div class="detail-vital ${escapeHtml(type)} ${escapeHtml(metricToneClass(value, max))}" style="--vital-fill:${metricPercent(value, max)}%">
+    <div class="detail-vital ${escapeHtml(type)} ${escapeHtml(resourceToneClass(value, max))}" style="--vital-fill:${resourcePercent(value, max)}%">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}/${escapeHtml(max)}</strong>
       <i></i>
@@ -1629,6 +1635,44 @@ function statScore(value, fallback = 10) {
     return fallback;
   }
   return Math.trunc(clamp(Number(value), 0, 20));
+}
+
+function storageMaxValue(value, fallback = 12) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.trunc(clamp(parsed, 1, 99));
+}
+
+function storageValue(value, max = 12) {
+  const limit = storageMaxValue(max, 12);
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.trunc(clamp(parsed, 0, limit));
+}
+
+function resourcePercent(value, max = 1) {
+  const limit = Math.max(1, Number(max) || 1);
+  return Math.round((clamp(Number(value) || 0, 0, limit) / limit) * 100);
+}
+
+function resourceToneClass(value, max = 1) {
+  const limit = Math.max(1, Number(max) || 1);
+  const current = clamp(Number(value) || 0, 0, limit);
+  if (current <= 0) {
+    return "metric-empty";
+  }
+  const ratio = current / limit;
+  if (ratio <= 0.25) {
+    return "metric-critical";
+  }
+  if (ratio <= 0.5) {
+    return "metric-low";
+  }
+  return "";
 }
 
 function compactVital(label, value, max, type) {
@@ -2340,9 +2384,11 @@ function saveCharacter() {
 
   const pvMax = metricMaxValue(elements.characterPvMax.value, 4);
   const staminaMax = metricMaxValue(elements.characterStaminaMax.value, 4);
+  const storageMax = storageMaxValue(elements.characterStorageMax.value, 12);
   const character = {
     id: elements.characterId.value,
     name: elements.characterName.value,
+    color: normalizeHexColor(elements.characterColor.value) || "#4e79d8",
     player: elements.characterPlayer.value,
     archetype: elements.characterArchetype.value,
     level: elements.characterLevel.value,
@@ -2350,6 +2396,8 @@ function saveCharacter() {
     pvMax: String(pvMax),
     stamina: String(metricValue(elements.characterStamina.value, staminaMax)),
     staminaMax: String(staminaMax),
+    storage: String(storageValue(elements.characterStorage.value, storageMax)),
+    storageMax: String(storageMax),
     stats: {
       force: String(statScore(elements.statForce.value)),
       agilite: String(statScore(elements.statAgilite.value)),
@@ -2376,6 +2424,7 @@ function openCharacter(id) {
   const stats = character.stats || {};
   elements.characterId.value = id;
   elements.characterName.value = character.name || "";
+  elements.characterColor.value = normalizeHexColor(character.color) || participantColor(character.player) || colorFromString(character.name);
   elements.characterPlayer.value = character.player || "";
   elements.characterArchetype.value = character.archetype || "";
   elements.characterLevel.value = character.level || "";
@@ -2385,6 +2434,9 @@ function openCharacter(id) {
   elements.characterPv.value = String(metricValue(character.pv, pvMax));
   elements.characterStaminaMax.value = String(staminaMax);
   elements.characterStamina.value = String(metricValue(character.stamina, staminaMax));
+  const storageMax = storageMaxValue(character.storageMax, 12);
+  elements.characterStorageMax.value = String(storageMax);
+  elements.characterStorage.value = String(storageValue(character.storage, storageMax));
   elements.statForce.value = String(statScore(stats.force));
   elements.statAgilite.value = String(statScore(stats.agilite ?? stats.dexterite));
   elements.statResistance.value = String(statScore(stats.resistance ?? stats.defense));
@@ -2409,6 +2461,9 @@ function clearCharacterForm() {
   elements.characterPvMax.value = "4";
   elements.characterStamina.value = "4";
   elements.characterStaminaMax.value = "4";
+  elements.characterStorage.value = "0";
+  elements.characterStorageMax.value = "12";
+  elements.characterColor.value = "#4e79d8";
   elements.statForce.value = "10";
   elements.statAgilite.value = "10";
   elements.statResistance.value = "10";

@@ -614,10 +614,12 @@ function handleRoll(room, actor, payload) {
 function characterFromPayload(payload, existing, actor) {
   const data = payload.character || {};
   const stats = data.stats || {};
+  const storageMax = clampInt(data.storageMax ?? existing?.storageMax ?? 12, 1, 99);
 
   return {
     id: existing?.id || data.id || crypto.randomUUID(),
     name: sanitizeText(data.name, 60) || "Personnage sans nom",
+    color: sanitizeColor(data.color, existing?.color || "#4e79d8"),
     player: sanitizeText(data.player, 50),
     archetype: sanitizeText(data.archetype, 70),
     level: sanitizeText(data.level, 20),
@@ -625,6 +627,8 @@ function characterFromPayload(payload, existing, actor) {
     pvMax: sanitizeText(data.pvMax, 12),
     stamina: sanitizeText(data.stamina, 12),
     staminaMax: sanitizeText(data.staminaMax, 12),
+    storage: String(clampInt(data.storage ?? existing?.storage ?? 0, 0, storageMax)),
+    storageMax: String(storageMax),
     stats: {
       force: sanitizeStat(stats.force, existing?.stats?.force ?? 10),
       agilite: sanitizeStat(stats.agilite ?? stats.dexterite, existing?.stats?.agilite ?? existing?.stats?.dexterite ?? 10),
