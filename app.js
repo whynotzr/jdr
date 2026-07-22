@@ -35,6 +35,11 @@ let autoSaveDrawing = localStorage.getItem("jdr-auto-save-drawing") === "true";
 let lastDiceConfig = readStoredJson("jdr-last-dice-config") || null;
 let lastPlayersRenderKey = "";
 let pendingDrawingStrokes = [];
+let renderFrame = 0;
+let drawingRenderFrame = 0;
+let drawingPreviewStroke = null;
+let drawingBackgroundCache = null;
+const lastRenderKeys = {};
 
 function readStoredJson(key) {
   try {
@@ -748,7 +753,7 @@ function finishLobbyLogin(payload) {
   renderLobbyResume();
   enterApp();
   connectEvents();
-  render();
+  scheduleRender();
 }
 
 function enterApp() {
@@ -784,7 +789,7 @@ function connectEvents() {
     }
     state = incomingState;
     reconcilePendingDrawings();
-    render();
+    scheduleRender();
   });
 }
 
@@ -831,7 +836,7 @@ async function action(actionName, payload) {
       if (shouldAcceptState(body.state)) {
         state = body.state;
         reconcilePendingDrawings();
-        render();
+        scheduleRender();
       }
     }
     return body;
@@ -846,12 +851,51 @@ function shouldAcceptState(nextState) {
     return true;
   }
 
+  const currentRevision = stateRevision(state);
+  const nextRevision = stateRevision(nextState);
+  if (currentRevision !== nextRevision) {
+    return nextRevision > currentRevision;
+  }
+
   return stateTime(nextState) >= stateTime(state);
+}
+
+function stateRevision(value) {
+  const revision = Number(value?.revision || 0);
+  return Number.isFinite(revision) ? revision : 0;
 }
 
 function stateTime(value) {
   const time = new Date(value?.updatedAt || 0).getTime();
   return Number.isFinite(time) ? time : 0;
+}
+
+function scheduleRender() {
+  if (renderFrame) {
+    return;
+  }
+
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = 0;
+    render();
+  });
+}
+
+function shouldSkipRender(key, value) {
+  const nextKey = typeof value === "string" ? value : stableStringify(value);
+  if (lastRenderKeys[key] === nextKey) {
+    return true;
+  }
+  lastRenderKeys[key] = nextKey;
+  return false;
+}
+
+function stableStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
 }
 
 function render() {
@@ -1083,6 +1127,7 @@ function toggleMapFullscreen() {
 
 function drawingThumbnail() {
   try {
+    flushDrawingRender();
     return elements.drawCanvas.toDataURL("image/jpeg", 0.52);
   } catch (error) {
     return "";
@@ -1557,6 +1602,10 @@ function renderCharacterDetails() {
   }
 
   const characters = state.characters || [];
+  if (shouldSkipRender("characterDetails", { isMj: isMj(), characters })) {
+    return;
+  }
+
   if (characters.length === 0) {
     elements.characterDetailsPanel.innerHTML = `<div class="empty-state">Aucune fiche a afficher.</div>`;
     return;
@@ -1886,6 +1935,9 @@ function rollToneClass(entry) {
 
 function renderDiceLog() {
   const entries = state.diceLog || [];
+  if (shouldSkipRender("diceLog", entries)) {
+    return;
+  }
   renderTopDiceTerminal(entries);
 
   if (entries.length === 0) {
@@ -1954,6 +2006,14 @@ function renderTopDiceTerminal(entries) {
 function renderSavedDrawings() {
   const savedDrawings = state.savedDrawings || [];
   const previousValue = elements.savedDrawingSelect.value;
+  if (shouldSkipRender("savedDrawings", {
+    activeSavedDrawingId: state.activeSavedDrawingId || "",
+    isMj: isMj(),
+    selected: previousValue,
+    savedDrawings
+  })) {
+    return;
+  }
 
   if (savedDrawings.length === 0) {
     elements.savedDrawingSelect.innerHTML = `<option value="">Aucun dessin sauvegarde</option>`;
@@ -2162,6 +2222,9 @@ function renderTokens() {
   }
 
   const tokens = state.tokens || [];
+  if (shouldSkipRender("tokens", tokens)) {
+    return;
+  }
   elements.tokenLayer.innerHTML = tokens
     .map(
       (token) => `
@@ -2374,15 +2437,52 @@ function pointInCanvas(event) {
 }
 
 function renderDrawing(extraStroke = null) {
+  drawingPreviewStroke = extraStroke || drawingPreviewStroke;
+  if (drawingRenderFrame) {
+    return;
+  }
+
+  drawingRenderFrame = requestAnimationFrame(() => {
+    drawingRenderFrame = 0;
+    renderDrawingNow(drawingPreviewStroke);
+    drawingPreviewStroke = null;
+  });
+}
+
+function flushDrawingRender() {
+  if (drawingRenderFrame) {
+    cancelAnimationFrame(drawingRenderFrame);
+    drawingRenderFrame = 0;
+  }
+  renderDrawingNow(drawingPreviewStroke);
+  drawingPreviewStroke = null;
+}
+
+function renderDrawingNow(extraStroke = null) {
   const canvas = elements.drawCanvas;
   const context = canvas.getContext("2d");
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  fillDrawingBackground(context, canvas);
+  context.drawImage(drawingBackground(canvas), 0, 0);
 
   const liveStroke = extraStroke || (isDrawing ? currentStroke : null);
   for (const stroke of [...(state?.drawings || []), ...pendingDrawingStrokes, liveStroke].filter(Boolean)) {
     drawStroke(context, canvas, stroke);
   }
+}
+
+function drawingBackground(canvas) {
+  if (
+    drawingBackgroundCache &&
+    drawingBackgroundCache.width === canvas.width &&
+    drawingBackgroundCache.height === canvas.height
+  ) {
+    return drawingBackgroundCache;
+  }
+
+  drawingBackgroundCache = document.createElement("canvas");
+  drawingBackgroundCache.width = canvas.width;
+  drawingBackgroundCache.height = canvas.height;
+  fillDrawingBackground(drawingBackgroundCache.getContext("2d"), drawingBackgroundCache);
+  return drawingBackgroundCache;
 }
 
 function fillDrawingBackground(context, canvas) {
