@@ -79,7 +79,6 @@ const worker = {
         if (viewer) {
           viewer.online = true;
           viewer.lastSeen = new Date().toISOString();
-          touch(room);
           await saveStore(env, store);
         }
         return jsonResponse(200, publicState(room, viewer));
@@ -316,6 +315,7 @@ function ensureRoom(store, roomCode) {
       code,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      revision: 0,
       participants: {},
       activeTurnPlayerId: null,
       activeRoll: null,
@@ -369,6 +369,7 @@ function normalizeRoomState(room) {
   room.activeRoll ||= null;
   room.scene = normalizeScene(room.scene);
   room.activeFx ||= null;
+  room.revision = Number.isFinite(Number(room.revision)) ? Number(room.revision) : 0;
 
   const now = Date.now();
   for (const player of Object.values(room.participants)) {
@@ -596,6 +597,7 @@ function publicState(room, actor = null) {
   return {
     code: room.code,
     updatedAt: room.updatedAt,
+    revision: Number(room.revision || 0),
     participants: Object.values(room.participants || {}).sort((a, b) => a.name.localeCompare(b.name)),
     turn: activeTurn
       ? {
@@ -630,8 +632,11 @@ function publicState(room, actor = null) {
   };
 }
 
-function touch(room) {
-  room.updatedAt = new Date().toISOString();
+function touch(room, { bumpRevision = true } = {}) {
+  if (bumpRevision) {
+    room.revision = Number(room.revision || 0) + 1;
+    room.updatedAt = new Date().toISOString();
+  }
 }
 
 function createParticipant(name, role) {

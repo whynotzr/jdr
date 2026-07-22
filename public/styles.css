@@ -5711,6 +5711,20 @@ body {
   cursor: not-allowed;
 }
 
+.draw-canvas {
+  touch-action: none;
+}
+
+.player-row,
+.dice-entry,
+.character-detail-card,
+.saved-plan-card,
+.red-dice-tray,
+.terminal-log-panel,
+.digital-clock-panel {
+  contain: layout paint;
+}
+
 /* Left rail without character list, compact dice selector */
 .party-sidebar {
   grid-template-rows: auto auto minmax(0, 1fr);

@@ -68,6 +68,7 @@ function ensureRoom(roomCode) {
       code,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      revision: 0,
       participants: {},
       activeTurnPlayerId: null,
       activeRoll: null,
@@ -121,6 +122,7 @@ function normalizeRoomState(room) {
   room.activeRoll ||= null;
   room.scene = normalizeScene(room.scene);
   room.activeFx ||= null;
+  room.revision = Number.isFinite(Number(room.revision)) ? Number(room.revision) : 0;
 
   const activeTurn = room.participants[room.activeTurnPlayerId];
   if (!activeTurn || !activeTurn.online || activeTurn.role === "MJ") {
@@ -383,6 +385,7 @@ function publicState(room, actor = null) {
   return {
     code: room.code,
     updatedAt: room.updatedAt,
+    revision: Number(room.revision || 0),
     participants: Object.values(room.participants || {}).sort((a, b) => a.name.localeCompare(b.name)),
     turn: activeTurn
       ? {
@@ -454,8 +457,11 @@ function broadcast(roomCode) {
   }
 }
 
-function touch(room) {
-  room.updatedAt = new Date().toISOString();
+function touch(room, { bumpRevision = true } = {}) {
+  if (bumpRevision) {
+    room.revision = Number(room.revision || 0) + 1;
+    room.updatedAt = new Date().toISOString();
+  }
   scheduleSave();
 }
 
@@ -1126,9 +1132,13 @@ const server = http.createServer(async (req, res) => {
       const participant = room.participants[clientId];
 
       if (participant) {
+        const wasOnline = participant.online;
         participant.online = true;
         participant.lastSeen = new Date().toISOString();
-        touch(room);
+        touch(room, { bumpRevision: false });
+        if (!wasOnline) {
+          broadcast(room.code);
+        }
       }
 
       res.writeHead(200, {
@@ -1154,10 +1164,12 @@ const server = http.createServer(async (req, res) => {
         if (participant) {
           participant.online = false;
           participant.lastSeen = new Date().toISOString();
+          let changedTurn = false;
           if (room.activeTurnPlayerId === participant.id) {
             clearTurn(room);
+            changedTurn = true;
           }
-          touch(room);
+          touch(room, { bumpRevision: changedTurn });
           broadcast(room.code);
         }
       });
