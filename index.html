@@ -311,6 +311,7 @@
             <input type="hidden" id="characterId">
             <div class="editor-grid">
               <label>Nom<input id="characterName" required maxlength="60"></label>
+              <label class="character-color-field">Couleur<input id="characterColor" type="color" value="#4e79d8" aria-label="Couleur du personnage"></label>
               <label>Joueur<input id="characterPlayer" maxlength="50"></label>
               <label>Classe<input id="characterArchetype" maxlength="70"></label>
               <label>Niveau<input id="characterLevel" maxlength="20"></label>
@@ -329,6 +330,14 @@
                     <input id="characterStamina" type="number" min="0" max="12" value="4" aria-label="Stamina actuelle">
                     <strong>/</strong>
                     <input id="characterStaminaMax" type="number" min="1" max="12" value="4" aria-label="Stamina maximum">
+                  </div>
+                </label>
+                <label class="editor-vital storage">
+                  <span>Stockage</span>
+                  <div class="editor-vital-control">
+                    <input id="characterStorage" type="number" min="0" max="99" value="0" aria-label="Stockage actuel">
+                    <strong>/</strong>
+                    <input id="characterStorageMax" type="number" min="1" max="99" value="12" aria-label="Stockage maximum">
                   </div>
                 </label>
               </div>

@@ -5788,3 +5788,97 @@ body {
   background: linear-gradient(180deg, rgba(105, 34, 29, 0.92), rgba(40, 14, 13, 0.98));
   color: #ffd9cf;
 }
+
+/* Character color and storage controls */
+.character-color-field input[type="color"] {
+  min-height: 42px;
+  padding: 4px;
+  border-color: rgba(127, 183, 176, 0.34);
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.editor-vital.storage {
+  border-color: rgba(199, 164, 80, 0.42);
+  background: linear-gradient(145deg, rgba(124, 92, 35, 0.32), rgba(0, 0, 0, 0.18));
+}
+
+#characterStorage,
+#characterStorageMax {
+  min-height: 42px;
+  padding: 4px 6px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.detail-vitals {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.detail-vital.storage i::before {
+  background: linear-gradient(90deg, #d2b15a, #8b6a2e);
+  box-shadow: 0 0 10px rgba(199, 164, 80, 0.26);
+}
+
+@media (max-width: 1220px) {
+  .detail-vitals {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Prevent cramped text in detailed character cards */
+.detail-vitals {
+  gap: 6px;
+}
+
+.detail-vital {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 5px;
+  padding: 7px 6px;
+}
+
+.detail-vital > span {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  color: #d2c399;
+  font-size: 11px;
+  font-weight: 1000;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.detail-vital strong {
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 18px;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.detail-vital i {
+  margin-top: 1px;
+}
+
+.detail-stat div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-stat span {
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-stat strong {
+  font-size: 16px;
+  line-height: 1;
+}
