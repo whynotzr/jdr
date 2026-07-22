@@ -4,6 +4,7 @@
   "description": "Table de jeu de role collaborative avec des, fiches de personnages et dessin partage.",
   "main": "server.js",
   "scripts": {
+    "build": "node scripts/build-sites.mjs",
     "dev": "node server.js",
     "start": "node server.js"
   },
