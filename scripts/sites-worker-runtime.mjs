@@ -2,6 +2,11 @@ const TOKEN_COLORS = ["#e15a4f", "#2f9e7e", "#da9a28", "#4e79d8", "#8a65c8", "#2
 const SCENE_MOODS = new Set(["donjon", "foret", "taverne", "combat", "mystique", "nuit"]);
 const TABLE_FX = new Set(["runes", "feu", "eclair", "brume"]);
 const STATE_KEYS = ["rooms", "accounts"];
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+};
 const memoryStore = { rooms: {}, accounts: {}, initialized: false };
 
 const worker = {
@@ -9,6 +14,10 @@ const worker = {
     const url = new URL(request.url);
 
     try {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: CORS_HEADERS });
+      }
+
       if (request.method === "POST" && url.pathname === "/api/mj/open") {
         const store = await loadStore(env);
         const body = await readJson(request);
@@ -158,7 +167,8 @@ async function streamRoomState(request, env, ctx, url) {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "Connection": "keep-alive",
-      "X-Accel-Buffering": "no"
+      "X-Accel-Buffering": "no",
+      ...CORS_HEADERS
     }
   });
 }
@@ -207,7 +217,8 @@ function staticResponse(pathname) {
   return new Response(asset.body, {
     headers: {
       "Content-Type": asset.contentType,
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      ...CORS_HEADERS
     }
   });
 }
@@ -217,7 +228,8 @@ function jsonResponse(status, payload) {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      ...CORS_HEADERS
     }
   });
 }
