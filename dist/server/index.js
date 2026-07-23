@@ -634,9 +634,10 @@ function touch(room, { bumpRevision = true } = {}) {
 function createParticipant(name, role) {
   const id = crypto.randomUUID();
   const color = TOKEN_COLORS[randomInt(0, TOKEN_COLORS.length)];
+  const safeName = sanitizeText(name, 40) || "Invite";
   return {
     id,
-    name: sanitizeText(name, 40) || "Invite",
+    name: safeName,
     role: role === "MJ" ? "MJ" : "Joueur",
     color,
     online: true,
@@ -645,13 +646,55 @@ function createParticipant(name, role) {
   };
 }
 
+function participantMatchKey(participant) {
+  const role = participant?.role === "MJ" ? "MJ" : "Joueur";
+  if (role === "MJ") {
+    return "MJ";
+  }
+
+  const name = sanitizeText(participant?.name, 40) || "Invite";
+  const normalizedName = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return `${role}:${normalizedName}`;
+}
+
+function reviveParticipant(existing, next) {
+  existing.name = next.name;
+  existing.role = next.role;
+  existing.color ||= next.color;
+  existing.joinedAt ||= next.joinedAt;
+  existing.online = true;
+  existing.lastSeen = new Date().toISOString();
+  return existing;
+}
+
 function addParticipantToRoom(room, name, role) {
   const participant = createParticipant(name, role);
-  for (const [participantId, oldParticipant] of Object.entries(room.participants)) {
-    if (!oldParticipant.online && oldParticipant.name === participant.name && oldParticipant.role === participant.role) {
+  const participantKey = participantMatchKey(participant);
+  const matches = Object.entries(room.participants || {}).filter(([, oldParticipant]) => (
+    participantMatchKey(oldParticipant) === participantKey
+  ));
+
+  if (matches.length) {
+    const activeMatch = matches.find(([participantId]) => participantId === room.activeTurnPlayerId);
+    const onlineMatch = matches.find(([, oldParticipant]) => oldParticipant.online);
+    const [keptId, keptParticipant] = activeMatch || onlineMatch || matches[matches.length - 1];
+    reviveParticipant(keptParticipant, participant);
+
+    for (const [participantId] of matches) {
+      if (participantId === keptId) {
+        continue;
+      }
+      if (room.activeTurnPlayerId === participantId) {
+        room.activeTurnPlayerId = keptId;
+      }
       delete room.participants[participantId];
     }
+    return keptParticipant;
   }
+
   room.participants[participant.id] = participant;
   return participant;
 }
