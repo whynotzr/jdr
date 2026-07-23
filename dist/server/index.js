@@ -342,11 +342,13 @@ function ensureRoom(store, roomCode) {
     };
   }
 
-  normalizeRoomState(store.rooms[code]);
-  return store.rooms[code];
+  const room = store.rooms[code];
+  normalizeRoomState(room);
+  return room;
 }
 
 function normalizeRoomState(room) {
+  let changed = false;
   room.participants ||= {};
   room.diceLog ||= [];
   room.characters ||= [];
@@ -369,10 +371,15 @@ function normalizeRoomState(room) {
     player.online = Number.isFinite(seen) && now - seen < 45000;
   }
 
+  changed = mergeDuplicateParticipants(room) || changed;
+
   const activeTurn = room.participants[room.activeTurnPlayerId];
   if (!activeTurn || !activeTurn.online || activeTurn.role === "MJ") {
+    changed = changed || Boolean(room.activeTurnPlayerId);
     room.activeTurnPlayerId = null;
   }
+
+  return changed;
 }
 
 function normalizeRoom(value) {
@@ -670,6 +677,67 @@ function reviveParticipant(existing, next) {
   return existing;
 }
 
+function participantTime(value) {
+  const time = new Date(value || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function chooseKeptParticipant(entries, activeTurnPlayerId) {
+  return entries
+    .slice()
+    .sort(([leftId, left], [rightId, right]) => {
+      const leftScore = (leftId === activeTurnPlayerId ? 4 : 0)
+        + (left.online ? 2 : 0)
+        + (participantTime(left.lastSeen || left.joinedAt) / 10_000_000_000_000);
+      const rightScore = (rightId === activeTurnPlayerId ? 4 : 0)
+        + (right.online ? 2 : 0)
+        + (participantTime(right.lastSeen || right.joinedAt) / 10_000_000_000_000);
+      return rightScore - leftScore;
+    })[0];
+}
+
+function mergeParticipantGroup(room, entries) {
+  if (entries.length < 2) {
+    return false;
+  }
+
+  const [keptId, keptParticipant] = chooseKeptParticipant(entries, room.activeTurnPlayerId);
+  const latestSeen = Math.max(...entries.map(([, player]) => participantTime(player.lastSeen || player.joinedAt)));
+  const earliestJoin = Math.min(...entries.map(([, player]) => participantTime(player.joinedAt || player.lastSeen)).filter(Boolean));
+  keptParticipant.online = entries.some(([, player]) => player.online);
+  keptParticipant.lastSeen = latestSeen ? new Date(latestSeen).toISOString() : keptParticipant.lastSeen;
+  keptParticipant.joinedAt = earliestJoin ? new Date(earliestJoin).toISOString() : keptParticipant.joinedAt;
+
+  for (const [participantId] of entries) {
+    if (participantId === keptId) {
+      continue;
+    }
+    if (room.activeTurnPlayerId === participantId) {
+      room.activeTurnPlayerId = keptId;
+    }
+    delete room.participants[participantId];
+  }
+
+  return true;
+}
+
+function mergeDuplicateParticipants(room) {
+  const groups = new Map();
+  for (const entry of Object.entries(room.participants || {})) {
+    const key = participantMatchKey(entry[1]);
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(entry);
+  }
+
+  let changed = false;
+  for (const entries of groups.values()) {
+    changed = mergeParticipantGroup(room, entries) || changed;
+  }
+  return changed;
+}
+
 function addParticipantToRoom(room, name, role) {
   const participant = createParticipant(name, role);
   const participantKey = participantMatchKey(participant);
@@ -678,9 +746,7 @@ function addParticipantToRoom(room, name, role) {
   ));
 
   if (matches.length) {
-    const activeMatch = matches.find(([participantId]) => participantId === room.activeTurnPlayerId);
-    const onlineMatch = matches.find(([, oldParticipant]) => oldParticipant.online);
-    const [keptId, keptParticipant] = activeMatch || onlineMatch || matches[matches.length - 1];
+    const [keptId, keptParticipant] = chooseKeptParticipant(matches, room.activeTurnPlayerId);
     reviveParticipant(keptParticipant, participant);
 
     for (const [participantId] of matches) {
